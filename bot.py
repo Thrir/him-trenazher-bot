@@ -106,11 +106,16 @@ async def send_next_question_by_user(bot_instance: Bot, user_id: int, state: FSM
     data = await state.get_data()
     category = data.get("current_category", "все")
       
-    substance, options = await db.get_random_question(category)
-    print(f"DEBUG: Результат из базы для категории '{category}': substance={substance}, options={options}")
-    
+    try:
+        substance, options = await db.get_random_question(category)
+        print(f"DEBUG: Результат из базы для категории '{category}': substance={substance}, options={options}")
+    except Exception as e:
+        print(f"ERROR in get_random_question: {e}")
+        await bot_instance.send_message(user_id, f"❌ Ошибка базы данных при получении вопроса: {e}")
+        return
+
     if not substance:
-        await bot_instance.send_message(user_id, f"⚠️ В категории '{category}' пока нет веществ или произошла ошибка!")
+        await bot_instance.send_message(user_id, f"⚠️ В категории '{category}' пока нет веществ!")
         return
 
     await state.update_data(correct_id=substance['id'])
@@ -134,13 +139,23 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     correct_id = data.get("correct_id")
       
-    substance = await db.get_substance_by_id(correct_id)
+    try:
+        substance = await db.get_substance_by_id(correct_id)
+    except Exception as e:
+        print(f"ERROR in get_substance_by_id: {e}")
+        substance = None
+
     if not substance:
-        await callback.message.answer("Ошибка вопроса.")
+        await callback.bot.send_message(callback.from_user.id, "❌ Ошибка: вопрос устарел.")
+        await send_next_question_by_user(callback.bot, callback.from_user.id, state)
         return
 
     is_correct = (user_answer == substance['name'])
-    await db.record_attempt(callback.from_user.id, correct_id, is_correct)
+    
+    try:
+        await db.record_attempt(callback.from_user.id, correct_id, is_correct)
+    except Exception as e:
+        print(f"ERROR in record_attempt: {e}")
       
     try:
         if is_correct:
@@ -154,7 +169,11 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message(F.text == "📊 Мой прогресс")
 async def show_progress(message: types.Message):
-    total, correct, percent = await db.get_user_stats(message.from_user.id)
+    try:
+        total, correct, percent = await db.get_user_stats(message.from_user.id)
+    except Exception as e:
+        print(f"ERROR in get_user_stats: {e}")
+        total, correct, percent = 0, 0, 0
       
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="🔄 Сбросить прогресс", callback_data="reset_stats")]]
@@ -172,7 +191,11 @@ async def show_progress(message: types.Message):
 @dp.callback_query(F.data == "reset_stats")
 async def reset_stats_handler(callback: types.CallbackQuery):
     await callback.answer("Статистика сброшена!")
-    await db.reset_user_stats(callback.from_user.id)
+    try:
+        await db.reset_user_stats(callback.from_user.id)
+    except Exception as e:
+        print(f"ERROR in reset_user_stats: {e}")
+        
     try:
         await callback.message.edit_text("🔄 Ваша статистика была успешно сброшена.")
     except Exception:
