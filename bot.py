@@ -6,6 +6,7 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 
 import database as db
@@ -17,6 +18,11 @@ ADMIN_ID = 980227176
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
+
+# Публичный адрес твоего сервиса на Render (без слэша на конце)
+WEBHOOK_SERVER_HOST = "https://him-trenazher-bot.onrender.com"
+WEBHOOK_PATH = f"/bot/{BOT_TOKEN}"
+WEBHOOK_URL = f"{WEBHOOK_SERVER_HOST}{WEBHOOK_PATH}"
 
 def get_main_keyboard():
     return ReplyKeyboardMarkup(
@@ -155,18 +161,32 @@ async def reset_stats_handler(callback: types.CallbackQuery):
 async def handle_ping(request):
     return web.Response(text="Bot is active")
 
+async def on_startup(bot: Bot):
+    await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
+
 async def main():
     await db.init_db()
     
     app = web.Application()
     app.router.add_get('/', handle_ping)
+    
+    # Настройка вебхука для aiogram
+    webhook_requests_handler = SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot,
+    )
+    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
+    setup_application(app, dp, bot=bot)
+    
+    app.on_startup.append(lambda a: on_startup(bot))
+    
+    port = int(os.environ.get("PORT", 10000))
     runner = web.AppRunner(app)
     await runner.setup()
-    port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     
-    await dp.start_polling(bot)
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
     asyncio.run(main())
