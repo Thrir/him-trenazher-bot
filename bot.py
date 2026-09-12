@@ -68,7 +68,7 @@ async def process_bulk_input(message: types.Message):
             
     if count > 0:
         await message.answer(f"✅ Успешно добавлено веществ: {count}", reply_markup=get_main_keyboard())
-        
+
 @dp.message(F.text == "🧪 Тренажёр")
 async def choose_category(message: types.Message):
     categories = db.get_categories()
