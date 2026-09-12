@@ -68,14 +68,31 @@ async def process_bulk_input(message: types.Message):
             
     if count > 0:
         await message.answer(f"✅ Успешно добавлено веществ: {count}", reply_markup=get_main_keyboard())
-    else:
-        await message.answer("⚠️ Не удалось разобрать формат. Убедись, что формат: `Формула | Название | Категория`")
-
+        
 @dp.message(F.text == "🧪 Тренажёр")
-async def start_quiz(message: types.Message, state: FSMContext):
-    substance, options = db.get_random_question(message.from_user.id)
+async def choose_category(message: types.Message):
+    categories = db.get_categories()
+    
+    buttons = [[InlineKeyboardButton(text="🎯 Все категории", callback_data="cat_все")]]
+    for cat in categories:
+        buttons.append([InlineKeyboardButton(text=f"🔬 {cat}", callback_data=f"cat_{cat}")])
+        
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await message.answer("Выбери категорию веществ для тренировки:", reply_markup=keyboard)
+
+@dp.callback_query(F.data.startswith("cat_"))
+async def start_quiz_category(callback: types.CallbackQuery, state: FSMContext):
+    category = callback.data.split("cat_")[1]
+    await state.update_data(current_category=category)
+    await send_next_question(callback.message, state)
+
+async def send_next_question(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    category = data.get("current_category", "все")
+    
+    substance, options = db.get_random_question(category)
     if not substance:
-        await message.answer("База знаний пока пуста или ты уже выучил все вещества!")
+        await message.answer("В этой категории пока нет веществ!")
         return
 
     await state.update_data(correct_id=substance['id'])
@@ -110,21 +127,31 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
     else:
         await callback.message.edit_text(f"❌ Неправильно. Правильный ответ: **{substance['name']}**.", parse_mode="Markdown")
     
-    await start_quiz(callback.message, state)
+    await send_next_question(callback.message, state)
 
 @dp.message(F.text == "📊 Мой прогресс")
 async def show_progress(message: types.Message):
     total, correct, percent = db.get_user_stats(message.from_user.id)
+    
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="🔄 Сбросить прогресс", callback_data="reset_stats")]]
+    )
     
     await message.answer(
         f"📊 **Ваша статистика**\n\n"
         f"🎯 Всего ответов: {total}\n"
         f"✅ Правильных: {correct}\n"
         f"📈 Точность: {percent}%",
+        reply_markup=keyboard,
         parse_mode="Markdown"
     )
 
-# Веб-сервер для поддержания работы на бесплатном тарифе Render
+@dp.callback_query(F.data == "reset_stats")
+async def reset_stats_handler(callback: types.CallbackQuery):
+    db.reset_user_stats(callback.from_user.id)
+    await callback.answer("Статистика сброшена!")
+    await callback.message.edit_text("🔄 Ваша статистика была успешно сброшена.")
+
 async def handle_ping(request):
     return web.Response(text="Bot is active")
 
