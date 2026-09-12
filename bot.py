@@ -88,8 +88,18 @@ async def choose_category(message: types.Message):
 
 @dp.callback_query(F.data.startswith("cat_"))
 async def start_quiz_category(callback: types.CallbackQuery, state: FSMContext):
-    category = callback.data.split("cat_")[1]
+    await callback.answer() # Снимаем крутилку загрузки с кнопки
+    category = callback.data.split("cat_", 1)[1]
+    print(f"DEBUG: Выбрана категория -> '{category}'")
+    
     await state.update_data(current_category=category)
+    
+    # Удаляем сообщение с выбором категорий
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+        
     await send_next_question(callback.message, state)
 
 async def send_next_question(message: types.Message, state: FSMContext):
@@ -98,7 +108,7 @@ async def send_next_question(message: types.Message, state: FSMContext):
       
     substance, options = await db.get_random_question(category)
     if not substance:
-        await message.answer("В этой категории пока нет веществ!")
+        await message.bot.send_message(message.chat.id, f"В категории '{category}' пока нет веществ!")
         return
 
     await state.update_data(correct_id=substance['id'])
@@ -108,7 +118,8 @@ async def send_next_question(message: types.Message, state: FSMContext):
     ]
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
       
-    await message.answer(
+    await message.bot.send_message(
+        message.chat.id,
         f"🧪 Какое тривиальное название у вещества: **{substance['formula']}**?",
         reply_markup=keyboard,
         parse_mode="Markdown"
@@ -116,13 +127,14 @@ async def send_next_question(message: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("ans_"))
 async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
     user_answer = callback.data.split("ans_")[1]
     data = await state.get_data()
     correct_id = data.get("correct_id")
       
     substance = await db.get_substance_by_id(correct_id)
     if not substance:
-        await callback.answer("Ошибка вопроса.")
+        await callback.message.answer("Ошибка вопроса.")
         return
 
     is_correct = (user_answer == substance['name'])
@@ -154,9 +166,12 @@ async def show_progress(message: types.Message):
 
 @dp.callback_query(F.data == "reset_stats")
 async def reset_stats_handler(callback: types.CallbackQuery):
-    await db.reset_user_stats(callback.from_user.id)
     await callback.answer("Статистика сброшена!")
-    await callback.message.edit_text("🔄 Ваша статистика была успешно сброшена.")
+    await db.reset_user_stats(callback.from_user.id)
+    try:
+        await callback.message.edit_text("🔄 Ваша статистика была успешно сброшена.")
+    except Exception:
+        pass
 
 async def handle_ping(request):
     return web.Response(text="Bot is active")
