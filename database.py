@@ -104,7 +104,8 @@ def record_attempt(user_id, substance_id, is_correct):
     ''', (user_id, substance_id, is_correct))
     conn.commit()
     conn.close()
-    def get_user_stats(user_id):
+
+def get_user_stats(user_id):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
