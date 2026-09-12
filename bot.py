@@ -11,7 +11,6 @@ from aiohttp import web
 
 import database as db
 
-# Настраиваем подробное логирование
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,6 @@ ADMIN_ID = 980227176
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# Публичный адрес твоего сервиса на Render (без слэша на конце)
 WEBHOOK_SERVER_HOST = "https://him-trenazher-bot.onrender.com"
 WEBHOOK_PATH = f"/bot/{BOT_TOKEN}"
 WEBHOOK_URL = f"{WEBHOOK_SERVER_HOST}{WEBHOOK_PATH}"
@@ -201,7 +199,7 @@ async def reset_stats_handler(callback: types.CallbackQuery):
     try:
         await db.reset_user_stats(callback.from_user.id)
     except Exception as e:
-        logger.error(f"Ошибка reset_user_stats: {e}")
+        logger.error(f"Ошибка reset_stats: {e}")
         
     try:
         await callback.message.edit_text("🔄 Ваша статистика была успешно сброшена.")
