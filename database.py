@@ -28,7 +28,7 @@ async def get_connection():
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
-    return await asyncpg.connect(DATABASE_URL, ssl=ctx)
+    return await asyncpg.connect(DATABASE_URL, ssl=ctx, statement_cache_size=0)
 
 async def init_db():
     if not DATABASE_URL:
