@@ -1,5 +1,3 @@
-Файл database.py
-Python
 import os
 import random
 import asyncpg
