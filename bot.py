@@ -5,30 +5,19 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiohttp import web
 
 import database as db
 
-# Настройка логов
 logging.basicConfig(level=logging.INFO)
 
-# Конфигурация
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = 980227176  # Твой Telegram ID
+ADMIN_ID = 980227176
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# Машины состояний
-class AdminStates(StatesGroup):
-    waiting_for_bulk_input = State()
-
-class QuizStates(StatesGroup):
-    answering = State()
-
-# Клавиатуры
 def get_main_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -48,12 +37,11 @@ async def cmd_start(message: types.Message):
     )
 
 @dp.message(Command("admin"))
-async def cmd_admin(message: types.Message, state: FSMContext):
+async def cmd_admin(message: types.Message):
     if message.from_user.id != ADMIN_ID:
         await message.answer("⛔ У вас нет прав администратора.")
         return
     
-    await state.set_state(AdminStates.waiting_for_bulk_input)
     await message.answer(
         "🛠 **Панель Репетитора**\n\n"
         "Чтобы добавить вещества массово, отправь сообщение списком в формате:\n"
@@ -64,8 +52,8 @@ async def cmd_admin(message: types.Message, state: FSMContext):
         parse_mode="Markdown"
     )
 
-@dp.message(AdminStates.waiting_for_bulk_input)
-async def process_bulk_input(message: types.Message, state: FSMContext):
+@dp.message(F.text.contains("|"))
+async def process_bulk_input(message: types.Message):
     if message.from_user.id != ADMIN_ID:
         return
     
@@ -78,8 +66,10 @@ async def process_bulk_input(message: types.Message, state: FSMContext):
             db.add_substance(formula, name, category)
             count += 1
             
-    await state.clear()
-    await message.answer(f"✅ Успешно добавлено веществ: {count}", reply_markup=get_main_keyboard())
+    if count > 0:
+        await message.answer(f"✅ Успешно добавлено веществ: {count}", reply_markup=get_main_keyboard())
+    else:
+        await message.answer("⚠️ Не удалось разобрать формат. Убедись, что формат: `Формула | Название | Категория`")
 
 @dp.message(F.text == "🧪 Тренажёр")
 async def start_quiz(message: types.Message, state: FSMContext):
@@ -122,14 +112,13 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
     
     await start_quiz(callback.message, state)
 
-# Фейковый веб-сервер для ублажения Render Web Service
+# Веб-сервер для поддержания работы на бесплатном тарифе Render
 async def handle_ping(request):
-    return web.Response(text="Bot is running!")
+    return web.Response(text="Bot is active")
 
 async def main():
     db.init_db()
     
-    # Запуск веб-сервера на порту от Render
     app = web.Application()
     app.router.add_get('/', handle_ping)
     runner = web.AppRunner(app)
@@ -138,7 +127,6 @@ async def main():
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     
-    # Запуск бота
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
