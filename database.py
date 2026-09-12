@@ -104,3 +104,17 @@ def record_attempt(user_id, substance_id, is_correct):
     ''', (user_id, substance_id, is_correct))
     conn.commit()
     conn.close()
+    def get_user_stats(user_id):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT COUNT(*) FROM attempts WHERE user_id = ?', (user_id,))
+    total_attempts = cursor.fetchone()[0]
+    
+    cursor.execute('SELECT COUNT(*) FROM attempts WHERE user_id = ? AND is_correct = 1', (user_id,))
+    correct_attempts = cursor.fetchone()[0]
+    
+    conn.close()
+    
+    percent = round((correct_attempts / total_attempts * 100)) if total_attempts > 0 else 0
+    return total_attempts, correct_attempts, percent
