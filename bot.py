@@ -88,27 +88,29 @@ async def choose_category(message: types.Message):
 
 @dp.callback_query(F.data.startswith("cat_"))
 async def start_quiz_category(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer() # Снимаем крутилку загрузки с кнопки
+    await callback.answer()
     category = callback.data.split("cat_", 1)[1]
-    print(f"DEBUG: Выбрана категория -> '{category}'")
+    print(f"DEBUG: Пользователь {callback.from_user.id} выбрал категорию -> '{category}'")
     
     await state.update_data(current_category=category)
     
-    # Удаляем сообщение с выбором категорий
+    # Удаляем меню выбора категорий
     try:
         await callback.message.delete()
     except Exception:
         pass
         
-    await send_next_question(callback.message, state)
+    await send_next_question_by_user(callback.bot, callback.from_user.id, state)
 
-async def send_next_question(message: types.Message, state: FSMContext):
+async def send_next_question_by_user(bot_instance: Bot, user_id: int, state: FSMContext):
     data = await state.get_data()
     category = data.get("current_category", "все")
       
     substance, options = await db.get_random_question(category)
+    print(f"DEBUG: Результат из базы для категории '{category}': substance={substance}, options={options}")
+    
     if not substance:
-        await message.bot.send_message(message.chat.id, f"В категории '{category}' пока нет веществ!")
+        await bot_instance.send_message(user_id, f"⚠️ В категории '{category}' пока нет веществ или произошла ошибка!")
         return
 
     await state.update_data(correct_id=substance['id'])
@@ -118,8 +120,8 @@ async def send_next_question(message: types.Message, state: FSMContext):
     ]
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
       
-    await message.bot.send_message(
-        message.chat.id,
+    await bot_instance.send_message(
+        user_id,
         f"🧪 Какое тривиальное название у вещества: **{substance['formula']}**?",
         reply_markup=keyboard,
         parse_mode="Markdown"
@@ -140,12 +142,15 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
     is_correct = (user_answer == substance['name'])
     await db.record_attempt(callback.from_user.id, correct_id, is_correct)
       
-    if is_correct:
-        await callback.message.edit_text(f"✅ Верно! **{substance['formula']}** — это **{substance['name']}**.", parse_mode="Markdown")
-    else:
-        await callback.message.edit_text(f"❌ Неправильно. Правильный ответ: **{substance['name']}**.", parse_mode="Markdown")
+    try:
+        if is_correct:
+            await callback.message.edit_text(f"✅ Верно! **{substance['formula']}** — это **{substance['name']}**.", parse_mode="Markdown")
+        else:
+            await callback.message.edit_text(f"❌ Неправильно. Правильный ответ: **{substance['name']}**.", parse_mode="Markdown")
+    except Exception:
+        pass
       
-    await send_next_question(callback.message, state)
+    await send_next_question_by_user(callback.bot, callback.from_user.id, state)
 
 @dp.message(F.text == "📊 Мой прогресс")
 async def show_progress(message: types.Message):
