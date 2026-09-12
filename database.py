@@ -1,9 +1,11 @@
 import os
 import random
 import asyncpg
+import ssl
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# Базовый набор веществ для автоматического заполнения пустой базы
 DEFAULT_SUBSTANCES = [
     ("H2SO4", "Серная кислота", "Кислоты"),
     ("NaOH", "Едкий натр", "Основания"),
@@ -23,7 +25,10 @@ DEFAULT_SUBSTANCES = [
 ]
 
 async def get_connection():
-    return await asyncpg.connect(DATABASE_URL)
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return await asyncpg.connect(DATABASE_URL, ssl=ctx)
 
 async def init_db():
     if not DATABASE_URL:
@@ -32,6 +37,7 @@ async def init_db():
 
     conn = await get_connection()
     try:
+        # Таблица пользователей
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 user_id BIGINT PRIMARY KEY,
@@ -40,6 +46,7 @@ async def init_db():
             )
         ''')
         
+        # Таблица веществ
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS substances (
                 id SERIAL PRIMARY KEY,
@@ -49,6 +56,7 @@ async def init_db():
             )
         ''')
         
+        # Таблица попыток
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS attempts (
                 id SERIAL PRIMARY KEY,
@@ -59,6 +67,7 @@ async def init_db():
             )
         ''')
         
+        # Проверяем и автоматически заполняем стартовыми веществами
         count = await conn.fetchval('SELECT COUNT(*) FROM substances')
         if count == 0:
             for formula, name, category in DEFAULT_SUBSTANCES:
