@@ -1,3 +1,5 @@
+Файл database.py
+Python
 import os
 import random
 import asyncpg
@@ -120,7 +122,6 @@ async def get_random_question(category=None):
     conn = await get_connection()
     try:
         if category and category != "все":
-            # Используем TRIM и LOWER для защиты от расхождений в пробелах и регистрах
             target = await conn.fetchrow(
                 'SELECT id, formula, name, category FROM substances WHERE TRIM(LOWER(category)) = TRIM(LOWER($1)) ORDER BY RANDOM() LIMIT 1',
                 category
@@ -134,7 +135,11 @@ async def get_random_question(category=None):
         target_dict = dict(target)
         
         wrong_rows = await conn.fetch(
-            'SELECT DISTINCT name FROM substances WHERE id != $1 ORDER BY RANDOM() LIMIT 3',
+            '''
+            SELECT name FROM (
+                SELECT DISTINCT name FROM substances WHERE id != $1
+            ) as sub ORDER BY RANDOM() LIMIT 3
+            ''',
             target_dict['id']
         )
         wrong_options = [r['name'] for r in wrong_rows]
