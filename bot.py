@@ -11,7 +11,9 @@ from aiohttp import web
 
 import database as db
 
-logging.basicConfig(level=logging.INFO)
+# Настраиваем подробное логирование
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 980227176
@@ -34,6 +36,7 @@ def get_main_keyboard():
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
+    logger.info(f"Получена команда /start от пользователя {message.from_user.id}")
     await db.add_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
     await message.answer(
         f"Привет, {message.from_user.first_name}!\n\n"
@@ -77,7 +80,9 @@ async def process_bulk_input(message: types.Message):
 
 @dp.message(F.text == "🧪 Тренажёр")
 async def choose_category(message: types.Message):
+    logger.info(f"Пользователь {message.from_user.id} нажал кнопку '🧪 Тренажёр'")
     categories = await db.get_categories()
+    logger.info(f"Получены категории из БД: {categories}")
       
     buttons = [[InlineKeyboardButton(text="🎯 Все категории", callback_data="cat_все")]]
     for cat in categories:
@@ -90,15 +95,14 @@ async def choose_category(message: types.Message):
 async def start_quiz_category(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     category = callback.data.split("cat_", 1)[1]
-    print(f"DEBUG: Пользователь {callback.from_user.id} выбрал категорию -> '{category}'")
+    logger.info(f"CALLBACK cat_: Пользователь {callback.from_user.id} выбрал категорию -> '{category}'")
     
     await state.update_data(current_category=category)
     
-    # Удаляем меню выбора категорий
     try:
         await callback.message.delete()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Не удалось удалить сообщение с категориями: {e}")
         
     await send_next_question_by_user(callback.bot, callback.from_user.id, state)
 
@@ -108,10 +112,10 @@ async def send_next_question_by_user(bot_instance: Bot, user_id: int, state: FSM
       
     try:
         substance, options = await db.get_random_question(category)
-        print(f"DEBUG: Результат из базы для категории '{category}': substance={substance}, options={options}")
+        logger.info(f"БД вернула вопрос для категории '{category}': substance={substance}, options={options}")
     except Exception as e:
-        print(f"ERROR in get_random_question: {e}")
-        await bot_instance.send_message(user_id, f"❌ Ошибка базы данных при получении вопроса: {e}")
+        logger.error(f"Ошибка при запросе get_random_question: {e}")
+        await bot_instance.send_message(user_id, f"❌ Ошибка базы данных: {e}")
         return
 
     if not substance:
@@ -138,11 +142,13 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
     user_answer = callback.data.split("ans_")[1]
     data = await state.get_data()
     correct_id = data.get("correct_id")
+    
+    logger.info(f"CALLBACK ans_: Пользователь {callback.from_user.id} ответил '{user_answer}', правильный ID={correct_id}")
       
     try:
         substance = await db.get_substance_by_id(correct_id)
     except Exception as e:
-        print(f"ERROR in get_substance_by_id: {e}")
+        logger.error(f"Ошибка get_substance_by_id: {e}")
         substance = None
 
     if not substance:
@@ -155,7 +161,7 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
     try:
         await db.record_attempt(callback.from_user.id, correct_id, is_correct)
     except Exception as e:
-        print(f"ERROR in record_attempt: {e}")
+        logger.error(f"Ошибка record_attempt: {e}")
       
     try:
         if is_correct:
@@ -169,10 +175,11 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message(F.text == "📊 Мой прогресс")
 async def show_progress(message: types.Message):
+    logger.info(f"Пользователь {message.from_user.id} запросил прогресс")
     try:
         total, correct, percent = await db.get_user_stats(message.from_user.id)
     except Exception as e:
-        print(f"ERROR in get_user_stats: {e}")
+        logger.error(f"Ошибка get_user_stats: {e}")
         total, correct, percent = 0, 0, 0
       
     keyboard = InlineKeyboardMarkup(
@@ -194,7 +201,7 @@ async def reset_stats_handler(callback: types.CallbackQuery):
     try:
         await db.reset_user_stats(callback.from_user.id)
     except Exception as e:
-        print(f"ERROR in reset_user_stats: {e}")
+        logger.error(f"Ошибка reset_user_stats: {e}")
         
     try:
         await callback.message.edit_text("🔄 Ваша статистика была успешно сброшена.")
@@ -205,15 +212,18 @@ async def handle_ping(request):
     return web.Response(text="Bot is active")
 
 async def on_startup(bot: Bot):
-    await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
+    logger.info("Установка вебхука...")
+    await bot.delete_webhook(drop_pending_updates=True)
+    await bot.set_webhook(WEBHOOK_URL)
+    logger.info(f"Вебхук успешно установлен на адрес: {WEBHOOK_URL}")
 
 async def main():
     await db.init_db()
+    logger.info("База данных инициализирована.")
       
     app = web.Application()
     app.router.add_get('/', handle_ping)
       
-    # Настройка вебхука для aiogram
     webhook_requests_handler = SimpleRequestHandler(
         dispatcher=dp,
         bot=bot,
@@ -228,6 +238,7 @@ async def main():
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
+    logger.info(f"Сервер запущен на порту {port}")
       
     await asyncio.Event().wait()
 
