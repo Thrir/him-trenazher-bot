@@ -96,7 +96,7 @@ async def add_substance(formula, name, category):
         await conn.execute('''
             INSERT INTO substances (formula, name, category)
             VALUES ($1, $2, $3)
-        ''', formula, name, category)
+        ''', formula, name, category.strip())
     finally:
         await conn.close()
 
@@ -120,8 +120,9 @@ async def get_random_question(category=None):
     conn = await get_connection()
     try:
         if category and category != "все":
+            # Используем TRIM и LOWER для защиты от расхождений в пробелах и регистрах
             target = await conn.fetchrow(
-                'SELECT id, formula, name, category FROM substances WHERE category = $1 ORDER BY RANDOM() LIMIT 1',
+                'SELECT id, formula, name, category FROM substances WHERE TRIM(LOWER(category)) = TRIM(LOWER($1)) ORDER BY RANDOM() LIMIT 1',
                 category
             )
         else:
