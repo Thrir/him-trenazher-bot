@@ -28,7 +28,7 @@ def get_main_keyboard():
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
-    db.add_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
+    await db.add_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
     await message.answer(
         f"Привет, {message.from_user.first_name}!\n\n"
         "Добро пожаловать в ХимТренажёр.\n"
@@ -63,7 +63,7 @@ async def process_bulk_input(message: types.Message):
         parts = [p.strip() for p in line.split('|')]
         if len(parts) == 3:
             formula, name, category = parts
-            db.add_substance(formula, name, category)
+            await db.add_substance(formula, name, category)
             count += 1
             
     if count > 0:
@@ -71,7 +71,7 @@ async def process_bulk_input(message: types.Message):
 
 @dp.message(F.text == "🧪 Тренажёр")
 async def choose_category(message: types.Message):
-    categories = db.get_categories()
+    categories = await db.get_categories()
     
     buttons = [[InlineKeyboardButton(text="🎯 Все категории", callback_data="cat_все")]]
     for cat in categories:
@@ -90,7 +90,7 @@ async def send_next_question(message: types.Message, state: FSMContext):
     data = await state.get_data()
     category = data.get("current_category", "все")
     
-    substance, options = db.get_random_question(category)
+    substance, options = await db.get_random_question(category)
     if not substance:
         await message.answer("В этой категории пока нет веществ!")
         return
@@ -114,13 +114,13 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     correct_id = data.get("correct_id")
     
-    substance = db.get_substance_by_id(correct_id)
+    substance = await db.get_substance_by_id(correct_id)
     if not substance:
         await callback.answer("Ошибка вопроса.")
         return
 
     is_correct = (user_answer == substance['name'])
-    db.record_attempt(callback.from_user.id, correct_id, is_correct)
+    await db.record_attempt(callback.from_user.id, correct_id, is_correct)
     
     if is_correct:
         await callback.message.edit_text(f"✅ Верно! **{substance['formula']}** — это **{substance['name']}**.", parse_mode="Markdown")
@@ -131,7 +131,7 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message(F.text == "📊 Мой прогресс")
 async def show_progress(message: types.Message):
-    total, correct, percent = db.get_user_stats(message.from_user.id)
+    total, correct, percent = await db.get_user_stats(message.from_user.id)
     
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="🔄 Сбросить прогресс", callback_data="reset_stats")]]
@@ -148,7 +148,7 @@ async def show_progress(message: types.Message):
 
 @dp.callback_query(F.data == "reset_stats")
 async def reset_stats_handler(callback: types.CallbackQuery):
-    db.reset_user_stats(callback.from_user.id)
+    await db.reset_user_stats(callback.from_user.id)
     await callback.answer("Статистика сброшена!")
     await callback.message.edit_text("🔄 Ваша статистика была успешно сброшена.")
 
@@ -156,7 +156,7 @@ async def handle_ping(request):
     return web.Response(text="Bot is active")
 
 async def main():
-    db.init_db()
+    await db.init_db()
     
     app = web.Application()
     app.router.add_get('/', handle_ping)
