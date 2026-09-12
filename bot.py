@@ -47,7 +47,7 @@ async def cmd_admin(message: types.Message):
     if message.from_user.id != ADMIN_ID:
         await message.answer("⛔ У вас нет прав администратора.")
         return
-    
+     
     await message.answer(
         "🛠 **Панель Репетитора**\n\n"
         "Чтобы добавить вещества массово, отправь сообщение списком в формате:\n"
@@ -62,7 +62,7 @@ async def cmd_admin(message: types.Message):
 async def process_bulk_input(message: types.Message):
     if message.from_user.id != ADMIN_ID:
         return
-    
+     
     lines = message.text.strip().split('\n')
     count = 0
     for line in lines:
@@ -71,18 +71,18 @@ async def process_bulk_input(message: types.Message):
             formula, name, category = parts
             await db.add_substance(formula, name, category)
             count += 1
-            
+              
     if count > 0:
         await message.answer(f"✅ Успешно добавлено веществ: {count}", reply_markup=get_main_keyboard())
 
 @dp.message(F.text == "🧪 Тренажёр")
 async def choose_category(message: types.Message):
     categories = await db.get_categories()
-    
+      
     buttons = [[InlineKeyboardButton(text="🎯 Все категории", callback_data="cat_все")]]
     for cat in categories:
         buttons.append([InlineKeyboardButton(text=f"🔬 {cat}", callback_data=f"cat_{cat}")])
-        
+          
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     await message.answer("Выбери категорию веществ для тренировки:", reply_markup=keyboard)
 
@@ -95,19 +95,19 @@ async def start_quiz_category(callback: types.CallbackQuery, state: FSMContext):
 async def send_next_question(message: types.Message, state: FSMContext):
     data = await state.get_data()
     category = data.get("current_category", "все")
-    
+      
     substance, options = await db.get_random_question(category)
     if not substance:
         await message.answer("В этой категории пока нет веществ!")
         return
 
     await state.update_data(correct_id=substance['id'])
-    
+      
     buttons = [
         [InlineKeyboardButton(text=opt, callback_data=f"ans_{opt}")] for opt in options
     ]
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-    
+      
     await message.answer(
         f"🧪 Какое тривиальное название у вещества: **{substance['formula']}**?",
         reply_markup=keyboard,
@@ -119,7 +119,7 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
     user_answer = callback.data.split("ans_")[1]
     data = await state.get_data()
     correct_id = data.get("correct_id")
-    
+      
     substance = await db.get_substance_by_id(correct_id)
     if not substance:
         await callback.answer("Ошибка вопроса.")
@@ -127,22 +127,22 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
 
     is_correct = (user_answer == substance['name'])
     await db.record_attempt(callback.from_user.id, correct_id, is_correct)
-    
+      
     if is_correct:
         await callback.message.edit_text(f"✅ Верно! **{substance['formula']}** — это **{substance['name']}**.", parse_mode="Markdown")
     else:
         await callback.message.edit_text(f"❌ Неправильно. Правильный ответ: **{substance['name']}**.", parse_mode="Markdown")
-    
+      
     await send_next_question(callback.message, state)
 
 @dp.message(F.text == "📊 Мой прогресс")
 async def show_progress(message: types.Message):
     total, correct, percent = await db.get_user_stats(message.from_user.id)
-    
+      
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="🔄 Сбросить прогресс", callback_data="reset_stats")]]
     )
-    
+      
     await message.answer(
         f"📊 **Ваша статистика**\n\n"
         f"🎯 Всего ответов: {total}\n"
@@ -166,10 +166,10 @@ async def on_startup(bot: Bot):
 
 async def main():
     await db.init_db()
-    
+      
     app = web.Application()
     app.router.add_get('/', handle_ping)
-    
+      
     # Настройка вебхука для aiogram
     webhook_requests_handler = SimpleRequestHandler(
         dispatcher=dp,
@@ -177,15 +177,15 @@ async def main():
     )
     webhook_requests_handler.register(app, path=WEBHOOK_PATH)
     setup_application(app, dp, bot=bot)
-    
-    app.on_startup.append(lambda a: on_startup(bot))
-    
+      
+    app.on_startup.append(lambda app: on_startup(bot))
+      
     port = int(os.environ.get("PORT", 10000))
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
-    
+      
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
