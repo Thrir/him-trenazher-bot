@@ -112,6 +112,18 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
     
     await start_quiz(callback.message, state)
 
+@dp.message(F.text == "📊 Мой прогресс")
+async def show_progress(message: types.Message):
+    total, correct, percent = db.get_user_stats(message.from_user.id)
+    
+    await message.answer(
+        f"📊 **Ваша статистика**\n\n"
+        f"🎯 Всего ответов: {total}\n"
+        f"✅ Правильных: {correct}\n"
+        f"📈 Точность: {percent}%",
+        parse_mode="Markdown"
+    )
+
 # Веб-сервер для поддержания работы на бесплатном тарифе Render
 async def handle_ping(request):
     return web.Response(text="Bot is active")
